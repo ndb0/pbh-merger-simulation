@@ -4,10 +4,11 @@ This project contains a set of Python scripts to simulate the merger rate of Pri
 
 The primary goal is to reproduce the theoretical predictions for the "early two-body" merger channel, which is the dominant channel for most PBH abundance scenarios.
 
-There are two main simulation modes:
+There are three main simulation modes:
 
-1. **Monte Carlo Simulation:** A fast, efficient method to calculate the merger rate evolution and compare it directly with the paper's theoretical predictions. This is the recommended approach for quantitative analysis.  
-2. **N-Body Visualization:** A simplified, direct N-body simulation designed to produce a visual animation of the spatial evolution and clustering of PBHs.
+1. **Monte Carlo Simulation:** A fast, efficient method to calculate the merger rate evolution and compare it directly with the paper's theoretical predictions. **This is the recommended approach for quantitative analysis.**  
+2. **N-Body Visualization:** A simplified, direct N-body simulation designed to produce a visual animation of the spatial evolution and clustering of PBHs.  
+3. **Time-Stepped Evolution:** An earlier, more computationally intensive approach that evolves all potential binaries through cosmic time step-by-step.
 
 ## **Setup**
 
@@ -30,11 +31,11 @@ Before running any simulations, you must create a dedicated Conda environment wi
 
 ## **Workflow 1: Monte Carlo Simulation (Recommended)**
 
-This workflow is the most direct way to compare your results with the paper's theoretical predictions for the merger rate.
+This workflow is the most direct and physically accurate way to compare your results with the paper's theoretical predictions for the merger rate.
 
 ### **Step 1: Run the Monte Carlo Simulation**
 
-This script uses the analytical formulas from the paper to generate a large sample of merging binaries and their coalescence times. It's very fast.
+This script uses the analytical formulas from the paper to generate a large sample of merging binaries and their coalescence times. It is very fast.
 
 \# Run the simulation using a configuration file  
 python monte\_carlo\_mergers.py input\_local\_cpu.yaml
@@ -58,7 +59,7 @@ This workflow is for generating a video to visualize how a population of PBHs cl
 
 ### **Step 1: Generate the Position Data**
 
-This script runs a simplified N-body simulation and saves the position of every particle at each time step. **Warning: This is computationally intensive.** It's recommended to use a small number of particles (e.g., set number\_density: 10 in your config file).
+This script runs a simplified N-body simulation and saves the position of every particle at each time step. **Warning: This is computationally intensive.** It is recommended to use a small number of particles (e.g., set number\_density: 10 in your config file).
 
 \# Run the N-body visualizer  
 python nbody\_visualizer.py input\_local\_cpu.yaml
@@ -75,3 +76,27 @@ python create\_animation.py results\_local\_cpu/positions\_history.npy
 
 * **Input:** The .npy position data file.  
 * **Output:** A video file named pbh\_evolution.mp4 in the root project directory.
+
+## **Workflow 3: Time-Stepped Evolution (Legacy)**
+
+This workflow uses the simulation\_runner.py script. It represents an earlier, more brute-force approach that evolves every potential binary pair through time. While computationally intensive and less efficient than the Monte Carlo method, it can be useful for understanding the step-by-step evolution process.
+
+### **Step 1: Run the Time-Stepped Simulation**
+
+This script identifies all pairs and evolves them through a cosmic time grid.
+
+\# Run the simulation using a configuration file  
+python simulation\_runner.py input\_local\_cpu.yaml
+
+* **Input:** input\_local\_cpu.yaml configuration file.  
+* **Output:** A JSON file with the merger history, e.g., results\_local\_cpu/simulation\_history\_fpbh\_1.0e-02.json.
+
+### **Step 2: Plot the Merger History vs. Redshift**
+
+This script plots the distribution of merger events as a function of redshift.
+
+\# Provide the path to the JSON file from the simulation runner  
+python plot\_evolution.py results\_local\_cpu/simulation\_history\_fpbh\_1.0e-02.json
+
+* **Input:** The JSON results file from the time-stepped simulation.  
+* **Output:** A PNG image showing the merger distribution vs. redshift, e.g., merger\_history\_plot.png.
