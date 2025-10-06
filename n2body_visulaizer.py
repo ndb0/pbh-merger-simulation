@@ -6,7 +6,7 @@ from tqdm import tqdm
 from config import load_config
 from pbh_population import generate_pbh_population
 from dynamics import compute_accelerations
-import time  # <-- This line fixes the error
+import time
 
 def run_nbody_simulation(cfg):
     """
@@ -40,16 +40,29 @@ def run_nbody_simulation(cfg):
 
     # --- 3. Simulation Parameters ---
     n_steps = 200  # Number of steps to save for the video
-    dt = 1e13      # Timestep in seconds (chosen for visualization)
+    dt_s = 1e14      # Timestep in seconds (chosen for visualization)
+
+    # Conversion factor from seconds to astronomical time units [Mpc/(km/s)]
+    # This is needed to make the integrator dimensionally consistent.
+    s_to_astro_time = 1 / 3.086e19
+    dt = dt_s * s_to_astro_time
 
     positions_history = np.zeros((n_steps, N, 3))
 
-    # --- 4. N-Body Evolution Loop ---
+    # --- 4. N-Body Evolution Loop (Corrected Leapfrog Integrator) ---
     print("-> Evolving system (this may take a while)...")
+
+    # Initial half-step for velocity
+    a = compute_accelerations(masses, positions)
+    velocities += a * (dt / 2.0)
+
     for i in tqdm(range(n_steps)):
-        # Very simple Leapfrog integration
-        velocities += compute_accelerations(masses, positions) * dt / (1e3**2) # Convert G_astro units
-        positions += velocities * dt / (3.086e19) # Convert to Mpc
+        # Full-step for position
+        positions += velocities * dt
+
+        # Full-step for velocity
+        a = compute_accelerations(masses, positions)
+        velocities += a * dt
 
         positions_history[i] = positions.cpu().numpy()
 
