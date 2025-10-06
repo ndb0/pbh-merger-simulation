@@ -1,0 +1,6 @@
+results_*
+*.json
+*.png
+*.npy
+*.mp4
+__pycache__/

@@ -1,0 +1,100 @@
+import torch
+import math
+import cosmo
+
+def generate_initial_velocities(masses, positions):
+    """
+    Calculates initial velocities for a virialized N-body system.
+    This implementation uses the total potential energy of the system to ensure
+    the virial theorem (2*<T> = -<V>) is satisfied for the system as a whole.
+    """
+    # --- Input Units ---
+    # masses: M_sun
+    # positions: Mpc
+
+    N = masses.shape[0]
+    device = masses.device
+
+    if N < 2:
+        return torch.zeros_like(positions)
+
+    # --- 1. Calculate Total Potential Energy of the System ---
+    # G_astro: Gravitational constant | Unit: Mpc (km/s)^2 / M_sun
+    G_astro = 4.30091e-9
+
+    # r_ij: Pairwise distances between all particles | Unit: Mpc | Dimension: L
+    diff = positions.unsqueeze(1) - positions.unsqueeze(0)
+    r_ij = torch.norm(diff, dim=2) + 1e-12  # Epsilon to avoid self-interaction issues
+
+    # m_i, m_j: masses prepared for broadcasting | Unit: M_sun | Dimension: M
+    m_i = masses.unsqueeze(1)
+    m_j = masses.unsqueeze(0)
+
+    # potential_energy_matrix: V_ij = -G * m_i * m_j / r_ij
+    # Unit: (Mpc (km/s)^2/M_sun) * M_sun * M_sun / Mpc = M_sun * (km/s)^2
+    # Dimension: M * (L/T)^2 (This is energy)
+    potential_energy_matrix = -G_astro * m_i * m_j / r_ij
+
+    # Total potential energy V = sum over all unique pairs (i < j).
+    # The 'torch.triu' gets the upper triangle, avoiding double counting and self-interaction.
+    total_potential_energy = torch.sum(torch.triu(potential_energy_matrix, diagonal=1))
+
+    # --- 2. Apply Virial Theorem to get Total Kinetic Energy ---
+    # 2*T = -V  =>  T = -0.5 * V
+    # total_kinetic_energy | Unit: M_sun * (km/s)^2 | Dimension: M * (L/T)^2
+    total_kinetic_energy = -0.5 * total_potential_energy
+
+    # --- 3. Distribute Kinetic Energy to Individual Particles ---
+    # We distribute the total KE in proportion to each particle's mass.
+    # KE_i = KE_total * (m_i / M_total)
+    total_mass = torch.sum(masses)
+    ke_per_particle = total_kinetic_energy * (masses / total_mass)
+
+    # --- 4. Calculate Velocity Magnitude for Each Particle ---
+    # KE_i = 0.5 * m_i * v_i^2  =>  v_i^2 = 2 * KE_i / m_i
+    # v_mag_sq | Unit: (M_sun*(km/s)^2) / M_sun = (km/s)^2 | Dimension: (L/T)^2
+    v_mag_sq = 2 * ke_per_particle / masses
+    v_mag_kms = torch.sqrt(torch.clamp(v_mag_sq, min=1e-9)) # Unit: km/s
+
+    # --- 5. Assign Random Directions and Convert Units ---
+    random_dirs = torch.randn((N, 3), device=device)
+    random_dirs = random_dirs / torch.norm(random_dirs, dim=1, keepdim=True)
+
+    # velocities_kms: Velocities | Unit: km/s | Dimension: L T^-1
+    velocities_kms = v_mag_kms.unsqueeze(1) * random_dirs
+
+    # Convert to Mpc/s for consistency with the N-body integrator
+    # km_per_Mpc is ~3.086e19, so 1 / km_per_Mpc is ~3.24e-20
+    km_to_Mpc = 1.0 / (cosmo.Mpc / 1000.0)
+    velocities_Mpc_s = velocities_kms * km_to_Mpc # Unit: Mpc/s
+
+    return velocities_Mpc_s
+
+def generate_pbh_population(
+    N: int,
+    mu: float,
+    sigma: float,
+    volume: float,
+    seed: int,
+    device: str
+):
+    """
+    Generates the initial masses, positions, and velocities for the PBH population.
+    """
+    torch.manual_seed(seed)
+    N = int(N)
+
+    # masses: log-normal distribution | Unit: M_sun | Dimension: M
+    log_mu = math.log(mu)
+    normal_dist = torch.distributions.Normal(log_mu, sigma)
+    masses = torch.exp(normal_dist.sample((N,))).to(device)
+
+    # positions: uniform in a cube | Unit: Mpc | Dimension: L
+    edge_len = volume ** (1./3.)
+    positions = (torch.rand((N, 3), device=device) - 0.5) * edge_len
+
+    # velocities: from virial theorem | Unit: Mpc/s | Dimension: L T^-1
+    velocities = generate_initial_velocities(masses, positions)
+
+    return masses, positions, velocities
+
